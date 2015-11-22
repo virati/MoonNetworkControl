@@ -250,7 +250,7 @@ end
 function [guardCleared]=guard2(nbrData,wpData,obstacleData,saveData,delta,agentRadius)
     % Set guardCleared to 1 to not impose any additional 
     % conditions on the mode switches
-    guardCleared = 1;
+    guardCleared = 0;
 end
 
 %% Waypoint 3
@@ -281,8 +281,53 @@ end
 % This function implements the decentralized controller that all robots use 
 % for clearing waypoint 3.
 function [u,saveData]=controller3(uid,nbrData,wpData,obstacleData,missionData,saveData,delta,agentRadius,firstCall)
-    u = [0;0]; % Give no control for now, 
-               % this is for you to implement
+u = [0;0];Ms = size(nbrData);
+    nu = [0;0];
+    p = 0.44;g = 500;
+    
+    AA_E = dist_energy(nbrData,6);
+    
+    for ii = 1:Ms(1)
+        distData(ii,1) = norm(nbrData(ii,1:2));
+        %distData(ii,2) = nbrData(ii,3);
+    end
+        
+    %Compute obstacle energies    
+    %[O_V, O_gain] = closest_obst(obstacleData./delta);
+    
+    [O_V] = all_obst(obstacleData);
+        
+    %Remap agents and their lead neighbors they go
+    remap_neig = [2,1;3,4;4,2;5,3;6,1];
+
+    nei = remap_neig(remap_neig(:,1) == uid,2);
+    if uid ~= 1
+        a = find(nbrData(:,3) == nei);       
+        
+        if isempty(a)
+            %Find the nearest neighbor
+            G = sortrows([nbrData,distData],4);
+            a = find(nbrData(:,3) == G(1,3));
+        end
+        
+        AA_E(AA_E > 0) = 0;
+        
+        for ii=1:Ms(1)
+            p = 0.3;
+            nu = nu + AA_E(ii) * nbrData(ii,1:2)';
+
+        end
+        nu = nu + 1 * nbrData(a,1:2)';
+        
+        res_vect = (p * O_V + (1-p) * nu/norm(nu));
+        u = g * res_vect ./ norm(res_vect);
+    elseif uid == 1
+        
+        res_vect = (p * O_V + (1-p) * wpData/norm(wpData))
+        u = g * res_vect ./ norm(res_vect);
+    end
+    
+    
 end
 
 % function [guardCleared]=guard3(nbrData,wpData,obstacleData,saveData,delta,agentRadius)
