@@ -204,7 +204,7 @@ function [u,saveData]=controller2(uid,nbrData,wpData,obstacleData,missionData,sa
     [O_V] = all_obst(obstacleData);
         
     %Remap agents and their lead neighbors they go
-    remap_neig = [2,1;3,4;4,2;5,3;6,5];
+    remap_neig = [2,1;3,2;4,3;5,4;6,5];
 
     nei = remap_neig(remap_neig(:,1) == uid,2);
     if uid ~= 1
@@ -218,7 +218,7 @@ function [u,saveData]=controller2(uid,nbrData,wpData,obstacleData,missionData,sa
             nu = nu + AA_E(ii) * nbrData(ii,1:2)';
 
         end
-        nu = nu + 1 * nbrData(a,1:2)';
+        nu = nu + 10 * nbrData(a,1:2)';
         
         res_vect = (p * O_V + (1-p) * nu/norm(nu));
         u = g * res_vect ./ norm(res_vect);
