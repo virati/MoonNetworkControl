@@ -127,7 +127,7 @@ end
 % This function implements the decentralized controller that all robots use 
 % for clearing waypoint 2.
 
-function E_d = dist_energy(nbrData,dist_multi)
+function E_d = dist_energy(nbrData,dist_multi,dist_gain)
     Ms = size(nbrData);
     r = 15;
     
@@ -135,7 +135,7 @@ function E_d = dist_energy(nbrData,dist_multi)
         dist(ii) = norm(nbrData(ii,1:2));
     end
     if Ms(1) ~= 0
-        E_d = 20 * (dist - dist_multi*r) ./ dist;
+        E_d = dist_gain * (dist - dist_multi*r) ./ dist;
     else
         E_d = 1;
     end
@@ -191,7 +191,7 @@ function [u,saveData]=controller2(uid,nbrData,wpData,obstacleData,missionData,sa
     nu = [0;0];
     p = 0.44;g = 500;
     
-    AA_E = dist_energy(nbrData,6);
+    AA_E = dist_energy(nbrData,6,20);
     
     for ii = 1:Ms(1)
         distData(ii,1) = norm(nbrData(ii,1:2));
@@ -250,7 +250,7 @@ end
 function [guardCleared]=guard2(nbrData,wpData,obstacleData,saveData,delta,agentRadius)
     % Set guardCleared to 1 to not impose any additional 
     % conditions on the mode switches
-    guardCleared = 0;
+    guardCleared = 1;
 end
 
 %% Waypoint 3
@@ -285,7 +285,7 @@ u = [0;0];Ms = size(nbrData);
     nu = [0;0];
     p = 0.44;g = 500;
     
-    AA_E = dist_energy(nbrData,6);
+    AA_E = dist_energy(nbrData,5,10);
     
     for ii = 1:Ms(1)
         distData(ii,1) = norm(nbrData(ii,1:2));
@@ -296,9 +296,10 @@ u = [0;0];Ms = size(nbrData);
     %[O_V, O_gain] = closest_obst(obstacleData./delta);
     
     [O_V] = all_obst(obstacleData);
-        
+    
+    AA_E(AA_E > 0) = 0;
     %Remap agents and their lead neighbors they go
-    remap_neig = [2,1;3,4;4,2;5,3;6,1];
+    remap_neig = [2,3;3,4;4,5;5,6;6,1];
 
     nei = remap_neig(remap_neig(:,1) == uid,2);
     if uid ~= 1
@@ -310,15 +311,15 @@ u = [0;0];Ms = size(nbrData);
             a = find(nbrData(:,3) == G(1,3));
         end
         
-        AA_E(AA_E > 0) = 0;
+        %AA_E(AA_E > 0) = 0;
         
         for ii=1:Ms(1)
-            p = 0.3;
+            
             nu = nu + AA_E(ii) * nbrData(ii,1:2)';
 
         end
         nu = nu + 1 * nbrData(a,1:2)';
-        
+        p = 0.4;
         res_vect = (p * O_V + (1-p) * nu/norm(nu));
         u = g * res_vect ./ norm(res_vect);
     elseif uid == 1
