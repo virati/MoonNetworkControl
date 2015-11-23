@@ -293,7 +293,7 @@ function E_d = dist_energy3(nbrData,dist_multi,dist_gain)
     end
 end
 
-function [A_V,nbrDist,A_gain] = all_agents3(uid,nbrData,distmulti)
+function [A_V,nbrDist,A_gain] = all_agents3(nbrData)
     %Generate a vector for each; this is easy since it's already done in
     %nbrData
     Ms = size(nbrData);
@@ -307,7 +307,7 @@ function [A_V,nbrDist,A_gain] = all_agents3(uid,nbrData,distmulti)
     ia_dist = 150;
     delta_dist = 200;
     
-    aV_w1 = (nbrDist - distmulti*15) ./ nbrDist;
+    aV_w1 = (nbrDist - 7*15) ./ nbrDist;
 
     %Merge the agent vectors with weights based on the optimal distance
     %add a multiplier for being OK to remove all but the LAST edge
@@ -316,12 +316,10 @@ function [A_V,nbrDist,A_gain] = all_agents3(uid,nbrData,distmulti)
     Em = 1/(Ms(1).^2);
     
     for ii = 1:Ms(1)
-        if nbrData(ii,3) == 1 && uid == 2;
-            lead_mult = 3;
-        else
-            lead_mult = 1;
-        end
-        A_Vall(ii,:) = lead_mult * aV_w1(ii) .* agentVectors(ii,:);
+        if nbrData(ii,3) == 1
+            lead_mult = 10;
+            
+        A_Vall(ii,:) = aV_w1(ii) .* agentVectors(ii,:);
     end
 
     A_V = sum(A_Vall,1)';
@@ -364,26 +362,17 @@ function [u,saveData]=controller3(uid,nbrData,wpData,obstacleData,missionData,sa
     
     [O_V,O_g] = all_obst3(obstacleData);
     p = 0.8;g = 500;
-    saveData(1) = saveData(1) + 1;
-    if saveData(1) > 80
-        [A_V,nbrDist,A_gain] = all_agents3(uid,nbrData,9);
-    else
-        [A_V,nbrDist,A_gain] = all_agents3(uid,nbrData,9);
-    end
-    
-    nlink = [0,1,2,1,3,5];
+    [A_V,nbrDist,A_gain] = all_agents3(nbrData);
     
     if uid == 1
-        p = 0.8;g = 550;
+        p = 0.8;
         u = g*(p*(wpData ./ norm(wpData)) + (1-p) * O_g * O_V);
     else
-        p=0.85;
+        p=0.8;
         %Aggregate vector added
         u = g*(p*A_gain*(A_V) + (1-p) * O_g * O_V);
-        idx = nbrData(:,3) == nlink(uid);
-        u = u + 10*nbrData(idx,1:2)' ./ norm(nbrData(idx,1:2));
     end
-    u = 0.8*u;
+    u = 1*u;
 end
 
 

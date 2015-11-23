@@ -293,7 +293,7 @@ function E_d = dist_energy3(nbrData,dist_multi,dist_gain)
     end
 end
 
-function [A_V,nbrDist,A_gain] = all_agents3(uid,nbrData,distmulti)
+function [A_V,nbrDist,A_gain] = all_agents3(nbrData)
     %Generate a vector for each; this is easy since it's already done in
     %nbrData
     Ms = size(nbrData);
@@ -307,8 +307,15 @@ function [A_V,nbrDist,A_gain] = all_agents3(uid,nbrData,distmulti)
     ia_dist = 150;
     delta_dist = 200;
     
-    aV_w1 = (nbrDist - distmulti*15) ./ nbrDist;
-
+    aV_w1 = (nbrDist - 5*15) ./ nbrDist;
+%     if Ms(1) == 2
+%         
+%     else
+%         aV_w1 = (nbrDist - 5*15) ./ nbrDist; 
+%         [~,bloc] = min(nbrDist);
+%         aV_w1(bloc) = (nbrDist(bloc) - 5*15) ./ nbrDist(bloc);
+%         
+%     end
     %Merge the agent vectors with weights based on the optimal distance
     %add a multiplier for being OK to remove all but the LAST edge
     
@@ -316,12 +323,7 @@ function [A_V,nbrDist,A_gain] = all_agents3(uid,nbrData,distmulti)
     Em = 1/(Ms(1).^2);
     
     for ii = 1:Ms(1)
-        if nbrData(ii,3) == 1 && uid == 2;
-            lead_mult = 3;
-        else
-            lead_mult = 1;
-        end
-        A_Vall(ii,:) = lead_mult * aV_w1(ii) .* agentVectors(ii,:);
+        A_Vall(ii,:) = aV_w1(ii) .* agentVectors(ii,:);
     end
 
     A_V = sum(A_Vall,1)';
@@ -351,8 +353,8 @@ function [O_dir,gain] = all_obst3(obD)
         O_dir = O_dir / norm(O_dir);
     end
     
-    if min(obD) < 30
-        gain = 5;
+    if min(obD) < 50
+        gain = 10;
     else
         gain = 1;
     end
@@ -363,30 +365,17 @@ function [u,saveData]=controller3(uid,nbrData,wpData,obstacleData,missionData,sa
     u = [0;0];Ms = size(nbrData);
     
     [O_V,O_g] = all_obst3(obstacleData);
-    p = 0.8;g = 500;
-    saveData(1) = saveData(1) + 1;
-    if saveData(1) > 80
-        [A_V,nbrDist,A_gain] = all_agents3(uid,nbrData,9);
-    else
-        [A_V,nbrDist,A_gain] = all_agents3(uid,nbrData,9);
-    end
-    
-    nlink = [0,1,2,1,3,5];
+    p = 0.9;g = 1000;
+    [A_V,nbrDist,A_gain] = all_agents3(nbrData);
     
     if uid == 1
-        p = 0.8;g = 550;
         u = g*(p*(wpData ./ norm(wpData)) + (1-p) * O_g * O_V);
     else
-        p=0.85;
         %Aggregate vector added
         u = g*(p*A_gain*(A_V) + (1-p) * O_g * O_V);
-        idx = nbrData(:,3) == nlink(uid);
-        u = u + 10*nbrData(idx,1:2)' ./ norm(nbrData(idx,1:2));
     end
-    u = 0.8*u;
+    u = 1*u;
 end
-
-
 % function [guardCleared]=guard3(nbrData,wpData,obstacleData,saveData,delta,agentRadius)
 % @param nbrData A (M x 3) matrix of sensed data from neighbors.
 %                Each row contains the relative displacement and UID of a

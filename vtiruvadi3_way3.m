@@ -293,7 +293,7 @@ function E_d = dist_energy3(nbrData,dist_multi,dist_gain)
     end
 end
 
-function [A_V,nbrDist,A_gain] = all_agents3(uid,nbrData,distmulti)
+function [A_V,nbrDist] = all_agents3(nbrData)
     %Generate a vector for each; this is easy since it's already done in
     %nbrData
     Ms = size(nbrData);
@@ -307,31 +307,15 @@ function [A_V,nbrDist,A_gain] = all_agents3(uid,nbrData,distmulti)
     ia_dist = 150;
     delta_dist = 200;
     
-    aV_w1 = (nbrDist - distmulti*15) ./ nbrDist;
-
+    aV_w1 = (nbrDist - 5*15) ./ nbrDist;
+    
     %Merge the agent vectors with weights based on the optimal distance
-    %add a multiplier for being OK to remove all but the LAST edge
-    
-    %Em = (Ms(1)/(Ms(1) - 0.9));
-    Em = 1/(Ms(1).^2);
-    
     for ii = 1:Ms(1)
-        if nbrData(ii,3) == 1 && uid == 2;
-            lead_mult = 3;
-        else
-            lead_mult = 1;
-        end
-        A_Vall(ii,:) = lead_mult * aV_w1(ii) .* agentVectors(ii,:);
+        A_Vall(ii,:) = aV_w1(ii) .* agentVectors(ii,:);
     end
 
     A_V = sum(A_Vall,1)';
     A_V = A_V ./ norm(A_V);
-    
-    if Ms(1) == 1
-        A_gain = Em;
-    else
-        A_gain = 1;
-    end
     
 end
 
@@ -351,11 +335,119 @@ function [O_dir,gain] = all_obst3(obD)
         O_dir = O_dir / norm(O_dir);
     end
     
-    if min(obD) < 30
-        gain = 5;
+    if min(obD) < 50
+        gain = 10;
     else
         gain = 1;
     end
+end
+
+%copy paste of controller 2
+function [u,saveData]=controller3copy(uid,nbrData,wpData,obstacleData,missionData,saveData,delta,agentRadius,firstCall)
+    u = [0;0];Ms = size(nbrData);
+    nu = [0;0];
+    g = 100;
+    
+    AA_E = dist_energy3(nbrData,6,20);
+    
+    for ii = 1:Ms(1)
+        distData(ii,1) = norm(nbrData(ii,1:2));
+    end
+        
+    %Compute obstacle energies    
+    %[O_V, O_gain] = closest_obst(obstacleData./delta);
+    
+    [O_V] = all_obst3(obstacleData);
+        
+    %Remap agents and their lead neighbors they go
+    remap_neig = [2,1;3,5;4,2;5,3;6,5];
+
+    nei = remap_neig(remap_neig(:,1) == uid,2);
+    if uid ~= 1
+        a = find(nbrData(:,3) == nei);       
+        
+        AA_E(AA_E > 0) = 0;
+        p = 0.6;
+        for ii=1:Ms(1)
+            
+            nu = nu + AA_E(ii) * nbrData(ii,1:2)';
+
+        end
+        %nu = nu + 2 * nbrData(a,1:2)';
+        
+        res_vect = (p * O_V + (1-p) * nu/norm(nu));
+        u = g * res_vect ./ norm(res_vect);
+    elseif uid == 1
+        p = 0.44
+        res_vect = (p * O_V + (1-p) * wpData/norm(wpData))
+        u = g * res_vect ./ norm(res_vect);
+    end
+    u = 1 * u;
+    disp(['Agent done: ' num2str(uid) ' with norm u as ' num2str(norm(u))]);
+end
+
+function [u,saveData]=controller3sidetracked(uid,nbrData,wpData,obstacleData,missionData,saveData,delta,agentRadius,firstCall)
+    u = [0;0];Ms = size(nbrData);
+    
+    saveData(1) = saveData(1) + 1;
+    if nbrData(1,3) == 1
+        if saveData(4) == 0
+            saveData(2) = nbrData(1,1);
+            saveData(3) = nbrData(1,2);
+            saveData(4) = 1;
+        elseif saveData(4) == 1
+            saveData(2) = nbrData(1,1) - saveData(2);
+            saveData(3) = nbrData(1,2) - saveData(3);
+            saveData(4) = 2;
+        end
+    end
+    
+    if min(obstacleData./delta) < 0.3
+        O_V = all_obst(obstacleData);
+    else
+        O_V = [0,0]';
+    end
+    %This gets a complete formation and moves, but need to incorp obst
+    %AA_E = dist_energy(nbrData,6,1);
+    [A_V,nbrDist] = all_agents(nbrData,delta);
+    
+    %Time dependent remapping
+    if saveData(1) < 100
+        remap = [0,1,4,2,3,5];
+    elseif saveData(1) >= 100 & saveData(1) < 150
+        remap = [0,4,5,1,4,5];
+    elseif saveData(1) >= 150 & saveData(1) < 1500000
+        remap = [0,4,5,5,1,5];
+    end
+    
+    
+    
+    if uid == 1
+        u = 300 * wpData ./ norm(wpData); 
+    else
+        g = 1000;
+        %Simply put in the edge energy based on neighbor distance to
+        %maintain formation
+        p = 0.7;
+        %This is to AVOID and maintain some formation
+        u = g*(p*A_V + (1-p) * O_V);
+        %This is to generate a leader movement
+        [a,b] = min(nbrDist);
+        idx = nbrData(:,3) == remap(uid);
+        
+        %Attempt to determine agent 1 direction and wpData and store in
+        %each agent's memory
+%         if saveData(4) == 2
+%             cwpD = [saveData(2), saveData(3)]'
+%             u = u + 300 * cwpD ./ norm(cwpD);
+%         end
+
+        %Attempt to have each agent have an associated agent that it
+        %follows closely
+        %u = u + 50*nbrData(idx,1:2)' ./ norm(nbrData(idx,1:2));
+    end
+    dil = 0.6;
+    u = dil * u;
 end
 
 
@@ -363,29 +455,160 @@ function [u,saveData]=controller3(uid,nbrData,wpData,obstacleData,missionData,sa
     u = [0;0];Ms = size(nbrData);
     
     [O_V,O_g] = all_obst3(obstacleData);
-    p = 0.8;g = 500;
-    saveData(1) = saveData(1) + 1;
-    if saveData(1) > 80
-        [A_V,nbrDist,A_gain] = all_agents3(uid,nbrData,9);
-    else
-        [A_V,nbrDist,A_gain] = all_agents3(uid,nbrData,9);
-    end
-    
-    nlink = [0,1,2,1,3,5];
-    
+    p = 0.9;g = 1000;
+    A_V = all_agents3(nbrData,
     if uid == 1
-        p = 0.8;g = 550;
         u = g*(p*(wpData ./ norm(wpData)) + (1-p) * O_g * O_V);
     else
-        p=0.85;
-        %Aggregate vector added
-        u = g*(p*A_gain*(A_V) + (1-p) * O_g * O_V);
-        idx = nbrData(:,3) == nlink(uid);
-        u = u + 10*nbrData(idx,1:2)' ./ norm(nbrData(idx,1:2));
+        u = 
     end
-    u = 0.8*u;
+    
 end
 
+function [u,saveData]=controller3nah(uid,nbrData,wpData,obstacleData,missionData,saveData,delta,agentRadius,firstCall)
+    u = [0;0];Ms = size(nbrData);
+    r = 15;
+    %Reform into complete graph;
+    
+    completed = 0;
+    for ii = 1:Ms(1)
+        nbrDist(ii) = norm(nbrData(ii,1:2));
+    end
+    
+    
+    %E1 = 10 * (nbrDist - 5*r) ./ (nbrDist);
+    E1 = -10*(5*r - nbrDist);
+    
+    if Ms(1) == 5
+        saveData(1) = 1;
+    end
+    
+    O_V = all_obst(obstacleData);
+    
+    if saveData(1) == 1;
+        if uid == 1
+            p = 0.7;
+            g1 = 500;
+            u = g1 * (p*(wpData ./ norm(wpData)) + (1-p) * O_V);
+        else
+            p = 0.6;chdelta = 0;
+            idx = nbrData(:,3) == uid - 1;
+            new_subtr = 1;
+            while sum(idx) == 0
+                new_subtr = new_subtr + 1;
+                idx = nbrData(:,3) == uid - new_subtr;
+            end
+            lead_idx = nbrData(:,3) == 1;
+                        
+            g = 1000;
+            %Agent to agent stuff
+            for ii = 1:idx
+                chdelta = chdelta + E1(idx) * nbrData(idx,1:2)';
+            end
+            
+            if sum(lead_idx) ~= 0
+                chdelta = chdelta + E1(lead_idx) * nbrData(lead_idx,1:2)';
+            end
+            
+            if min(obstacleData./delta) < 0.4
+                multi = 100;
+            else
+                multi = 1;
+            end
+            u = g * (p * (chdelta)./norm(chdelta)) + ((1-p) * multi * O_V)
+            xx = 1;
+        end
+    else       
+        for ii = 1:Ms(1)
+            u = u + E1(ii) * nbrData(ii,1:2)';
+        end
+    end
+    u = 0.5 * u;
+end
+    
+function [u,saveData]=controller3ehhhh(uid,nbrData,wpData,obstacleData,missionData,saveData,delta,agentRadius,firstCall)
+    u = [0;0];Ms = size(nbrData);
+    
+    O_V = all_obst3(obstacleData);
+    %This gets a complete formation and moves, but need to incorp obst
+    %AA_E = dist_energy(nbrData,6,1);
+    A_V = all_agents3(nbrData,delta);
+    g = 100;
+    
+    
+    if uid == 1
+        p = 0.6;
+        res_vect = ((1-p) * O_V + (p) * wpData/norm(wpData));
+        u = g * res_vect ./ norm(res_vect);
+    else
+        p = 0.8
+        %Simply put in the edge energy based on neighbor distance to
+        %maintain formation
+        u = g*(p*A_V + (1-p)*O_V);
+    end
+    dil = 1;
+    u = dil * u;
+end
+
+function [u,saveData]=controller3badtry(uid,nbrData,wpData,obstacleData,missionData,saveData,delta,agentRadius,firstCall)
+    u = [0;0];Ms = size(nbrData);
+    nu = [0;0];
+    p = 0.44;g = 500;
+    if firstCall
+        saveData(1) = 1;
+    end
+    
+    AA_E = dist_energy(nbrData,6,1);
+    
+    for ii = 1:Ms(1)
+        distData(ii,1) = norm(nbrData(ii,1:2));
+        distData(ii,2) = nbrData(ii,3);
+    end
+        
+    %Compute obstacle energies    
+    %[O_V, O_gain] = closest_obst(obstacleData./delta);
+    
+    [O_V] = all_obst(obstacleData);
+        
+    %Remap agents and their lead neighbors they go
+    remap_neig(1,:,:) = [2,5;3,2;4,3;5,6;6,1];
+    remap_neig(2,:,:) = [2,3;3,5;4,2;5,6;6,3];
+    remap_neig(3,:,:) = [2,3;3,4;4,1;5,6;6,1];
+    remap_neig(4,:,:) = [2,3;3,1;4,3;5,1;6,1];
+    
+    map_n = saveData(1);
+    
+    nei = remap_neig(map_n,remap_neig(map_n,:,1) == uid,2);
+    if uid ~= 1
+        a = find(nbrData(:,3) == nei);       
+        
+        while isempty(a)
+            map_n = map_n + 1;
+            nei = remap_neig(map_n,remap_neig(map_n,:,1) == uid,2);
+            a = find(nbrData(:,3) == nei);
+            saveData(1) = map_n;
+        end
+        
+        
+        AA_E(AA_E > 0 & AA_E < 0.4) = 0;
+        
+        for ii=1:Ms(1)
+            p = 0.4;gd = 100;
+            nu = nu + gd * AA_E(ii) * nbrData(ii,1:2)';
+
+        end
+        nu = nu + 1 * nbrData(a,1:2)';
+        
+        res_vect = (p * O_V + (1-p) * nu/norm(nu));
+        u = g * res_vect ./ norm(res_vect);
+    elseif uid == 1
+        
+        res_vect = (p * O_V + (1-p) * wpData/norm(wpData))
+        u = g * res_vect ./ norm(res_vect);
+    end
+    disp(['Agent done: ' num2str(uid) ' with norm u as ' num2str(norm(u))]);
+
+end
 
 % function [guardCleared]=guard3(nbrData,wpData,obstacleData,saveData,delta,agentRadius)
 % @param nbrData A (M x 3) matrix of sensed data from neighbors.
