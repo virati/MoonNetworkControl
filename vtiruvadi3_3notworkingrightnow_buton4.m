@@ -358,28 +358,28 @@ function [O_dir,gain] = all_obst3(obD)
     end
 end
 
-
+%THIS SHOULD BE WORKING, DON'T MESS WITH IT!
 function [u,saveData]=controller3(uid,nbrData,wpData,obstacleData,missionData,saveData,delta,agentRadius,firstCall)
     u = [0;0];Ms = size(nbrData);
     
     [O_V,O_g] = all_obst3(obstacleData);
     p = 0.8;g = 500;
     saveData(1) = saveData(1) + 1
-    if saveData(1) > 180
+    if saveData(1) < 180
         [A_V,nbrDist,A_gain] = all_agents3(uid,nbrData,10);
-    else
+    elseif saveData(1) >= 180 & saveData(1) <= 1900
         [A_V,nbrDist,A_gain] = all_agents3(uid,nbrData,5);
         g1 = 200;
+    elseif saveData(1) > 1900
     end
     
     nlink = [0,1,2,1,3,5];
     
     if uid == 1
-
-        p = 0.71;g = 200;
+        p = 0.7;g = 200;
         u = g*(p*(wpData ./ norm(wpData)) + (1-p) * O_g * O_V);
     else
-        p=0.75;
+        p=0.7;
         %Aggregate vector added
         u = g*(p*A_gain*(A_V) + (1-p) * O_g * O_V);
         %idx = nbrData(:,3) == nlink(uid);
@@ -409,7 +409,9 @@ end
 function [guardCleared]=guard3(nbrData,wpData,obstacleData,saveData,delta,agentRadius)
     % Set guardCleared to 1 to not impose any additional 
     % conditions on the mode switches
+    saveData(1) = 0;
     guardCleared = 1;
+    
 end
 
 %% Waypoint 4
@@ -442,34 +444,56 @@ end
 function [u,saveData]=controller4(uid,nbrData,wpData,obstacleData,missionData,saveData,delta,agentRadius,firstCall)
     u = [0;0]; % Give no control for now, 
                % this is for you to implement
-    Ms = size(nbrData);     
+    Ms = size(nbrData);
+    p = 0.9;g = 500;
     if(firstCall)
         saveData(1) = 0;
+        saveData(2) = 1;
     end
-    if uid == 1
-        saveData(1) = saveData(1) + 1
-    end
+    saveData(1) = saveData(1) + 1
     
     [O_V,O_g] = all_obst3(obstacleData);
-    
-    [A_V,nbrDist,A_gain] = all_agents3(uid,nbrData,11);
-    p = 0.8; g = 1000;
-   if uid == 1
-        u = g * wpData ./ norm(wpData);
+    if saveData(1) < 50 & uid <= 6
+        [A_V,nbrDist,A_gain] = all_agents3(uid,nbrData,8);
+    else
+        [A_V,nbrDist,A_gain] = all_agents3(uid,nbrData,9);
+    end
+    if uid == 1
+        u = g* wpData ./ norm(wpData);
         
-   else
-       p = 0.6;
-       for ii = 1:Ms(1)
-           u = u + g*(p*(A_V) + (1-p) * O_V);
-       end
-   end
+    else
 
-   if saveData(1) > 80 & saveData(1) <= 140 & uid == 1
-    u = u ./ norm(u) + 1000 * missionData(4,:)' ./ norm(missionData(4,:));     
-   elseif saveData(1) > 170 & saveData(1) < 200 & uid == 1
-       u = u ./ norm(u) + 1000 * missionData(2,:)' ./ norm(missionData(2,:)); 
-   end
-   
+       for ii = 1:Ms(1)
+           u = u + g*(p*A_gain*(A_V) + (1-p) * O_g * O_V);
+       end
+       if saveData(1) > 50
+           %Move more to the right
+            disp('More than 100');
+            %Have each agent find a corner of the box closest to it
+            %becs = size(missionData);
+            
+            %for jj = 1:becs(1)
+             %   bec_dist = norm(missionData(jj,:));
+            %end
+            %[cb_dist,closest_bec] = min(bec_dist);
+            %u = u ./ norm(u) + saveData(2) * 500 * missionData(closest_bec,:)';
+            %rotate the vector a bit
+            q = 0.5;
+            
+            %u = q*u + (1-q) * rotmatrix(pi/2) * u;
+            
+            %Rotate towards a waypoint
+            if uid == 2
+                u = q*u + (1-q) * g * missionData(2,:)'./norm(missionData(2,:));
+            elseif uid == 4
+                u = q*u + (1-q) * g*missionData(3,:)' ./ norm(missionData(3,:));
+            end
+            
+            saveData(2) = - saveData(2);
+       end
+    end
+    
+        u = 0.5 * u;
 end
 
 % function [guardCleared]=guard4(nbrData,wpData,obstacleData,saveData,delta,agentRadius)
@@ -524,49 +548,7 @@ end
 % for clearing waypoint 5.
 function [u,saveData]=controller5(uid,nbrData,wpData,obstacleData,missionData,saveData,delta,agentRadius,firstCall)
     u = [0;0]; % Give no control for now, 
-               % this is for you to implement(1)
-               Ms = size(nbrData);
-    if firstCall
-        saveData(1) = 0;
-    end
-   saveData(1) = saveData(1) + 2;
-   
-   [O_V,O_g] = all_obst3(obstacleData);
-    
-    [A_V,nbrDist,A_gain] = all_agents3(uid,nbrData,12);
-    p = 0.72; g = 500;
-   if uid == 1
-       
-        u = g * (p * (wpData ./ norm(wpData)) + (1-p) * (O_V));
-   else
-       if saveData(1)  < 100
-       p = 0.90;
-       else
-        p = 0.7;
-       end
-       for ii = 1:Ms(1)
-           u = u + g*(p*(A_V) + (1-p) * O_V);
-       end
-       %if sum(nbrData(:,3) == 1) == 1
-       % u = u./norm(u) + 500* nbrData(nbrData(:,3) == 1,1:2)' ./ nbrData(nbrData(:,3) == 1,1:2)';
-       %end
-       if saveData(1) >= 20
-           q = 0.6;
-           saved_wp_surrogate = [saveData(2),saveData(3)]' ./ norm([saveData(2),saveData(3)]);
-           if isfinite(saved_wp_surrogate) 
-               
-            u = g * (q * u ./ norm(u) + (1-q) * Ms(1) * saved_wp_surrogate);
-           end
-       end
-   end
-   
-   if saveData(1) < 20 & sum(nbrData(:,3) == 1) == 1
-    saveData(2) = saveData(2) + u(1);
-    saveData(3) = saveData(3) + u(2);
-   else
-   
-       u = 0.8 * u;
-   end
+               % this is for you to implement
 end
 
 % function [guardCleared]=guard5(nbrData,wpData,obstacleData,saveData,delta,agentRadius)
